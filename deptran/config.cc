@@ -258,6 +258,7 @@ void Config::init_sharding(const char *filename) {
     max_retry_ = pt.get<unsigned int>("benchmark.<xmlattr>.max_retry", 1);
 
     concurrent_txn_ = pt.get<unsigned int>("benchmark.<xmlattr>.concurrent_txn", 1);
+    max_txn_ = pt.get<unsigned int>("benchmark.<xmlattr>.max_txn", 0);
     batch_start_ = pt.get<bool>("benchmark.<xmlattr>.batch_start", false);
 
     std::string txn_weight_str = pt.get<std::string>("benchmark.<xmlattr>.txn_weight", "");
@@ -677,6 +678,10 @@ Config::single_server_t Config::get_single_server() {
 
 unsigned int Config::get_concurrent_txn() {
     return concurrent_txn_;
+}
+
+unsigned int Config::get_max_txn() {
+    return max_txn_;
 }
 
 bool Config::get_batch_start() {

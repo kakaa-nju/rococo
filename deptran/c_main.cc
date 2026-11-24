@@ -75,7 +75,15 @@ void *coo_work(void *_attr) {
         num_txn.store(0);
         success.store(0);
         num_try.store(0);
-        std::function<void(TxnReply&)> callback = [coo_id, coo, &callback, &num_txn, &success, &num_try, &finish_mutex, &finish_cond, &concurrent_txn] (TxnReply &txn_reply) {
+        // Bounded amount of work for deterministic simulation: after max_txn
+        // committed/aborted transactions the loop stops issuing new ones.
+        const unsigned int max_txn = Config::get_config()->get_max_txn();
+        unsigned int txn_done = 0;
+        std::function<void(TxnReply&)> callback = [coo_id, coo, &callback, &num_txn, &success, &num_try, &finish_mutex, &finish_cond, &concurrent_txn, &txn_done, max_txn] (TxnReply &txn_reply) {
+            ++txn_done;
+            if (max_txn > 0 && txn_done >= max_txn) {
+                TimerLoop::stop();
+            }
             TIMER_IF_NOT_END {
                 TxnRequest req;
                 TxnRequestFactory::init_txn_req(&req, coo_id);
@@ -98,19 +106,35 @@ void *coo_work(void *_attr) {
             num_try.fetch_add(txn_reply.n_try_);
         };
         TIMER_SET(duration);
-        //pthread_mutex_lock(&finish_mutex);
-        finish_mutex.lock();
-        for (unsigned int n_txn = 0; n_txn < concurrent_txn; n_txn++) {
-            TxnRequest req;
-            TxnRequestFactory::init_txn_req(&req, coo_id);
-            req.callback_ = callback;
-            coo->do_one(req);
+        if (rrr::PollMgr::single_threaded()) {
+            // No poll thread and no worker thread: this thread owns the event
+            // loop, so completion is observed by driving it, never by waiting
+            // on a condition variable another thread would have to signal.
+            for (unsigned int n_txn = 0; n_txn < concurrent_txn; n_txn++) {
+                TxnRequest req;
+                TxnRequestFactory::init_txn_req(&req, coo_id);
+                req.callback_ = callback;
+                coo->do_one(req);
+            }
+            while (concurrent_txn > 0) {
+                rrr::PollMgr::poll_all(1);
+                rrr::ThreadPool::drain();
+            }
+        } else {
+            //pthread_mutex_lock(&finish_mutex);
+            finish_mutex.lock();
+            for (unsigned int n_txn = 0; n_txn < concurrent_txn; n_txn++) {
+                TxnRequest req;
+                TxnRequestFactory::init_txn_req(&req, coo_id);
+                req.callback_ = callback;
+                coo->do_one(req);
+            }
+            while (concurrent_txn > 0)
+                //pthread_cond_wait(&finish_cond, &finish_mutex);
+                finish_cond.wait(finish_mutex);
+            //pthread_mutex_unlock(&finish_mutex);
+            finish_mutex.unlock();
         }
-        while (concurrent_txn > 0)
-            //pthread_cond_wait(&finish_cond, &finish_mutex);
-            finish_cond.wait(finish_mutex);
-        //pthread_mutex_unlock(&finish_mutex);
-        finish_mutex.unlock();
         Log_info("Finish:\nTotal: %u, Commit: %u, Attempts: %u, Running for %u\n", num_txn.load(), success.load(), num_try.load(), Config::get_config()->get_duration());
     }
 
@@ -185,11 +209,20 @@ int main(int argc, char *argv[]) {
         worker_attrs[thread_index].ccsi = ccsi;
         worker_attrs[thread_index].concurrent_txn = concurrent_txn;
 
-        pthread_create(coo_threads + thread_index, NULL, &coo_work, worker_attrs + thread_index);
     }
 
-    for (thread_index = 0; thread_index < num_threads; thread_index++)
-        pthread_join(coo_threads[thread_index], NULL);
+    if (rrr::PollMgr::single_threaded()) {
+        // One thread per process: the coordinator runs on the main thread and
+        // is the process's only event-loop driver.
+        for (thread_index = 0; thread_index < num_threads; thread_index++)
+            coo_work(worker_attrs + thread_index);
+    } else {
+        for (thread_index = 0; thread_index < num_threads; thread_index++)
+            Pthread_create(coo_threads + thread_index, NULL, &coo_work, worker_attrs + thread_index);
+
+        for (thread_index = 0; thread_index < num_threads; thread_index++)
+            pthread_join(coo_threads[thread_index], NULL);
+    }
 
     free(worker_attrs);
     free(coo_threads);
