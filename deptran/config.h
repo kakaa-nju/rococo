@@ -40,6 +40,7 @@ private:
     unsigned int max_retry_;
     single_server_t single_server_;
     unsigned int concurrent_txn_;
+    unsigned int max_txn_;
     bool batch_start_;
     int server_or_client_; // 0 for server, 1 for client, init -1
     std::vector<double> txn_weight_;
@@ -109,6 +110,8 @@ public:
     single_server_t get_single_server();
 
     unsigned int get_concurrent_txn();
+
+    unsigned int get_max_txn();
 
     bool get_batch_start();
 

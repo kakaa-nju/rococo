@@ -180,6 +180,14 @@ int main(int argc, char *argv[]) {
 #endif
     }
     else {
+        if (rrr::PollMgr::single_threaded()) {
+            // Single-threaded tracee: the main thread is the event loop that
+            // serves every RPC connection and drives periodic jobs.
+            for (;;) {
+                rrr::PollMgr::poll_all(1);
+                rrr::ThreadPool::drain();
+            }
+        }
         while (1) {
             sleep(1000);
         }

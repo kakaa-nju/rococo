@@ -32,15 +32,15 @@ inline rrr::Marshal& operator >>(rrr::Marshal& m, point3& o) {
 class BenchmarkService: public rrr::Service {
 public:
     enum {
-        FAST_PRIME = 0x4aa413ce,
-        FAST_DOT_PROD = 0x465fc24d,
-        FAST_ADD = 0x54ea8906,
-        FAST_NOP = 0x4636de70,
-        PRIME = 0x460d64f2,
-        DOT_PROD = 0x6cab52ae,
-        ADD = 0x5f55a4e7,
-        NOP = 0x580501d9,
-        SLEEP = 0x64bef70f,
+        FAST_PRIME = 0x2da48088,
+        FAST_DOT_PROD = 0x35d830df,
+        FAST_ADD = 0x274cf543,
+        FAST_NOP = 0x40fec0d1,
+        PRIME = 0x1dd59ec9,
+        DOT_PROD = 0x3f1131d1,
+        ADD = 0x15e6a83a,
+        NOP = 0x5a200565,
+        SLEEP = 0x371891a2,
     };
     int __reg_to__(rrr::Server* svr) {
         int ret = 0;

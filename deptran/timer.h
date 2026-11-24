@@ -19,6 +19,7 @@ private:
 public:
     static void init(uint32_t time = 60);
     static bool is_run();
+    static void stop();
 };
 
 }
